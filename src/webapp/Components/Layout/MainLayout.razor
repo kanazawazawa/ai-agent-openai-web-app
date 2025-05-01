@@ -1,0 +1,210 @@
+﻿@inherits LayoutComponentBase
+@using dotnetfashionassistant.Services
+@inject CartUpdateService CartUpdateService
+<CascadingValue Value="this">
+<header class="masthead">
+    <div class="header-content">
+        <div class="brand-container">
+            <img src="images/storelogo.png" alt="Fashion Store Logo" class="header-logo">
+            <h1>Fashion Store Assistant</h1>
+        </div>
+        <nav class="main-nav">
+            <ul class="nav-list">                <li class="nav-item">
+                    <a class="nav-link @(GetCurrentPageClass("/"))" href="/">
+                        <i class="bi bi-chat-dots-fill"></i> Assistant
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link @(GetCurrentPageClass("/inventory"))" href="/inventory">
+                        <i class="bi bi-box-seam-fill"></i> Inventory
+                    </a>
+                </li>                <li class="nav-item">
+                    <a class="nav-link @(GetCurrentPageClass("/cart"))" href="/cart">
+                        <i class="bi bi-cart-fill"></i> Cart
+                        <span id="cartBadge" class="cart-badge" style="@(CartItemCount > 0 ? "display:inline-block" : "display:none")">
+                            @CartItemCount
+                        </span>
+                    </a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</header>
+
+<style>
+    .masthead {
+        background-color: #003057;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
+    }
+      .header-content {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        width: 100%;
+        margin: 0 auto;
+        position: relative;
+    }
+    
+    .brand-container {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+      .header-logo {
+        height: 50px;
+        /* Removed filter to show the actual logo image */
+    }
+    
+    .masthead h1 {
+        font-size: 1.8rem;
+        margin: 0;
+        color: #ffffff;
+    }
+    
+    .main-nav {
+        position: absolute;
+        right: 0;
+    }
+    
+    .nav-list {
+        display: flex;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        gap: 1rem;
+    }
+    
+    .nav-link {
+        color: #ffffff;
+        text-decoration: none;
+        font-weight: 500;
+        padding: 0.5rem 1.25rem;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background-color: #004880;
+    }
+    
+    .nav-link:hover {
+        background-color: #005a9e;
+        color: white;
+    }
+    
+    .nav-link.active {
+        background-color: #0078d7;
+        color: white;
+    }
+      .nav-link i {
+        font-size: 1.2rem;
+    }
+    
+    .cart-badge {
+        position: absolute;
+        top: -6px;
+        right: -6px;
+        background-color: #ff6b6b;
+        color: white;
+        border-radius: 50%;
+        padding: 0.15rem 0.35rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+    }
+    
+    .nav-item {
+        position: relative;
+    }
+    
+    @@media (max-width: 768px) {
+        .header-content {
+            flex-direction: column;
+            padding: 0.5rem 0;
+        }
+        
+        .nav-list {
+            margin-top: 1rem;
+        }
+    }
+</style>
+
+<main>
+    @Body
+</main>
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>
+</CascadingValue>
+
+@code {
+    [Inject]
+    public required NavigationManager NavigationManager { get; set; }
+    
+    [Inject]
+    public required IHttpClientFactory HttpClientFactory { get; set; }
+    
+    private int CartItemCount { get; set; } = 0;
+      protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to the cart update events
+        CartUpdateService.CartUpdated += OnCartUpdated;
+        
+        // Initial cart count load
+        await UpdateCartItemCount();
+    }
+      protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Set up a timer to periodically update cart count as a fallback (every 5 seconds)
+            var timer = new System.Threading.Timer(async _ =>
+            {
+                await UpdateCartItemCount();
+                await InvokeAsync(StateHasChanged);
+            }, null, 0, 5000);
+        }
+        
+        return Task.CompletedTask;
+    }
+    
+    // This method is called whenever the CartUpdateService triggers an update
+    private async void OnCartUpdated()
+    {
+        await UpdateCartItemCount();
+        await InvokeAsync(StateHasChanged);
+    }
+    
+    // Clean up event handler when component is disposed
+    public void Dispose()
+    {
+        CartUpdateService.CartUpdated -= OnCartUpdated;
+    }      public async Task UpdateCartItemCount()
+    {
+        try
+        {
+            var client = HttpClientFactory.CreateClient("LocalApi");
+            var cartSummary = await client.GetFromJsonAsync<dotnetfashionassistant.Models.CartSummary>("api/Cart");
+            CartItemCount = cartSummary?.Items?.Sum(item => item.Quantity) ?? 0;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            // Silently fail if API is not available
+            CartItemCount = 0;
+        }
+    }
+    
+    private string GetCurrentPageClass(string page)
+    {
+        var currentUri = NavigationManager.Uri.ToLower();
+        if (page == "/" && currentUri.EndsWith("/"))
+            return "active";
+        else if (page != "/" && currentUri.EndsWith(page.ToLower()))
+            return "active";
+        return "";
+    }
+}
