@@ -452,3 +452,8 @@ FodyWeavers.xsd
 
 src/phi-3-sidecar/Phi-3-mini-4k-instruct-onnx/
 .azure/
+
+# Azure resource information (contains sensitive data)
+AZURE_RESOURCES.md
+*_RESOURCES.md
+*.azure-resources.md
