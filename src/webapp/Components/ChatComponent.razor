@@ -41,7 +41,32 @@
                         }
                         else
                         {
-                            <p>@((MarkupString)(!string.IsNullOrEmpty(msg.FormattedContent) ? msg.FormattedContent : msg.Content))</p>
+                            @if (!string.IsNullOrEmpty(msg.FormattedContent))
+                            {
+                                @((MarkupString)msg.FormattedContent)
+                            }
+                            else
+                            {
+                                <p>@msg.Content</p>
+                            }
+                            
+                            @* 商品名を含むメッセージの場合、コピーボタンを表示 *@
+                            @if (ContainsProductName(msg.Content))
+                            {
+                                <div class="product-copy-section mt-2">
+                                    @foreach (var productName in ExtractProductNames(msg.Content))
+                                    {
+                                        <div class="product-name-item d-flex align-items-center justify-content-between mb-1">
+                                            <span class="product-name text-muted small">@productName</span>
+                                            <button class="btn btn-sm btn-outline-secondary copy-btn" 
+                                                    title="商品名をコピー"
+                                                    @onclick="@(() => CopyToClipboard(productName))">
+                                                <i class="bi bi-clipboard"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </div>
+                            }
                         }
                     </div>
                 </div>
@@ -200,6 +225,52 @@
     
     .typing-dot:nth-child(3) {
         animation-delay: 0;
+    }
+    
+    /* Product copy section styles */
+    .product-copy-section {
+        border-top: 1px solid #e0e0e0;
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+    
+    .product-name-item {
+        background-color: rgba(255, 255, 255, 0.5);
+        border-radius: 6px;
+        padding: 4px 8px;
+        margin-bottom: 4px;
+    }
+    
+    .product-name-item .product-name {
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+        flex-grow: 1;
+        margin-right: 8px;
+    }
+    
+    .copy-btn {
+        padding: 2px 6px;
+        border: none;
+        background-color: transparent;
+        color: #6c757d;
+        font-size: 0.75rem;
+        transition: all 0.2s ease;
+    }
+    
+    .copy-btn:hover {
+        background-color: #f8f9fa;
+        color: #0d6efd;
+        border-color: #0d6efd;
+        transform: scale(1.05);
+    }
+    
+    .copy-btn:active {
+        transform: scale(0.95);
+    }
+    
+    .copy-success {
+        color: #198754 !important;
+        border-color: #198754 !important;
     }
     
     @@keyframes typing {
@@ -413,6 +484,95 @@
         catch
         {
             // Silently fail if JS interop fails
+        }
+    }
+
+    // 商品名検出とクリップボード機能
+    private bool ContainsProductName(string message)
+    {
+        // 商品名を含む可能性のあるパターンを検出
+        var productPatterns = new[]
+        {
+            @"\b[A-Z][a-zA-Z\s]+(Jacket|Shirt|Pants|Dress|Shoes|Hat|Coat|Jeans|Sweater|Blouse|Skirt|Suit|Hoodie|T-Shirt|Sneakers|Boots)\b",
+            @"(Navy Blue|Black|White|Red|Blue|Green|Yellow|Pink|Purple|Brown|Gray|Grey)\s+[A-Za-z\s]+(Jacket|Shirt|Pants|Dress|Shoes|Hat|Coat|Jeans|Sweater|Blouse|Skirt|Suit|Hoodie|T-Shirt|Sneakers|Boots)",
+            @"\b[A-Z][a-zA-Z\s]+\s+(Denim|Cotton|Wool|Silk|Leather|Canvas|Polyester)\s+[A-Za-z\s]*\b"
+        };
+
+        foreach (var pattern in productPatterns)
+        {
+            if (System.Text.RegularExpressions.Regex.IsMatch(message, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private List<string> ExtractProductNames(string message)
+    {
+        var productNames = new List<string>();
+        
+        var productPatterns = new[]
+        {
+            @"\b[A-Z][a-zA-Z\s]+(Jacket|Shirt|Pants|Dress|Shoes|Hat|Coat|Jeans|Sweater|Blouse|Skirt|Suit|Hoodie|T-Shirt|Sneakers|Boots)\b",
+            @"(Navy Blue|Black|White|Red|Blue|Green|Yellow|Pink|Purple|Brown|Gray|Grey)\s+[A-Za-z\s]+(Jacket|Shirt|Pants|Dress|Shoes|Hat|Coat|Jeans|Sweater|Blouse|Skirt|Suit|Hoodie|T-Shirt|Sneakers|Boots)",
+            @"\b[A-Z][a-zA-Z\s]+\s+(Denim|Cotton|Wool|Silk|Leather|Canvas|Polyester)\s+[A-Za-z\s]*\b"
+        };
+
+        foreach (var pattern in productPatterns)
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(message, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                var productName = match.Value.Trim();
+                if (!productNames.Contains(productName) && productName.Length > 5) // 短すぎる名前は除外
+                {
+                    productNames.Add(productName);
+                }
+            }
+        }
+
+        return productNames;
+    }
+
+    private async Task CopyToClipboard(string text)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            
+            // 成功通知を表示（一時的にボタンの色を変更）
+            var escapedText = text.Replace("'", "\\'").Replace("\"", "\\\"");
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                setTimeout(() => {{
+                    const buttons = document.querySelectorAll('.copy-btn');
+                    buttons.forEach(btn => {{
+                        if (btn.closest('.product-name-item').textContent.includes('{escapedText}')) {{
+                            btn.classList.add('copy-success');
+                            btn.innerHTML = '<i class=""bi bi-check""></i>';
+                            setTimeout(() => {{
+                                btn.classList.remove('copy-success');
+                                btn.innerHTML = '<i class=""bi bi-clipboard""></i>';
+                            }}, 1500);
+                        }}
+                    }});
+                }}, 50);
+            ");
+        }
+        catch (Exception)
+        {
+            // フォールバック：クリップボードAPIが使用できない場合
+            var escapedText = text.Replace("'", "\\'").Replace("\"", "\\\"");
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                const textArea = document.createElement('textarea');
+                textArea.value = '{escapedText}';
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('商品名「{escapedText}」をクリップボードにコピーしました！');
+            ");
         }
     }
 }

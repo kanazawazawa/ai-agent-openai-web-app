@@ -59,7 +59,14 @@
                             <img src="@GetProductImageUrl(item.ProductId)" alt="@item.ProductName" />
                         </div>                
                         <div class="product-info">
-                            <h3 class="product-name">@item.ProductName</h3>
+                            <div class="product-name-container">
+                                <h3 class="product-name">@item.ProductName</h3>
+                                <button class="copy-product-name-btn" 
+                                        title="商品名をコピー"
+                                        @onclick="@(() => CopyProductNameToClipboard(item.ProductName))">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
                             <div class="product-price">$@item.Price.ToString("0.00")</div>
                               <div class="product-sizes">
                                 <span class="size-label">Available Sizes:</span>
@@ -224,12 +231,47 @@
         flex-grow: 1;
     }
       
+    .product-name-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+        gap: 0.5rem;
+    }
+      
     .product-name {
         font-size: 1.0rem;
         font-weight: 600;
-        margin-bottom: 0.5rem;
+        margin: 0;
         color: #1a1a1a;
         min-height: 2.2rem;
+        flex-grow: 1;
+    }
+    
+    .copy-product-name-btn {
+        background: none;
+        border: none;
+        color: #6c757d;
+        cursor: pointer;
+        padding: 0.25rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s ease;
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+    
+    .copy-product-name-btn:hover {
+        background-color: #e9ecef;
+        color: #0d6efd;
+        transform: scale(1.1);
+    }
+    
+    .copy-product-name-btn:active {
+        transform: scale(0.95);
+    }
+    
+    .copy-product-name-btn.copy-success {
+        color: #198754;
     }
     
     .product-price {
@@ -710,6 +752,47 @@
         {
             Console.WriteLine($"Error updating cart counter: {ex.Message}");
             // Silently fail if we can't update the counter
+        }
+    }
+    
+    private async Task CopyProductNameToClipboard(string productName)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", productName);
+            
+            // 成功通知を表示（一時的にボタンの色を変更）
+            var escapedProductName = productName.Replace("'", "\\'").Replace("\"", "\\\"");
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                // 該当する商品のコピーボタンを見つけて成功状態に変更
+                const productCards = document.querySelectorAll('.product-card');
+                productCards.forEach(card => {{
+                    const productNameElement = card.querySelector('.product-name');
+                    const copyBtn = card.querySelector('.copy-product-name-btn');
+                    if (productNameElement && copyBtn && productNameElement.textContent.trim() === '{escapedProductName}') {{
+                        copyBtn.classList.add('copy-success');
+                        copyBtn.innerHTML = '<i class=""bi bi-check""></i>';
+                        setTimeout(() => {{
+                            copyBtn.classList.remove('copy-success');
+                            copyBtn.innerHTML = '<i class=""bi bi-clipboard""></i>';
+                        }}, 1500);
+                    }}
+                }});
+            ");
+        }
+        catch (Exception)
+        {
+            // フォールバック：クリップボードAPIが使用できない場合
+            var escapedProductName = productName.Replace("'", "\\'").Replace("\"", "\\\"");
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                const textArea = document.createElement('textarea');
+                textArea.value = '{escapedProductName}';
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                alert('商品名「{escapedProductName}」をクリップボードにコピーしました！');
+            ");
         }
     }
 }
