@@ -16,7 +16,8 @@ namespace dotnetfashionassistant.Services
     {
         private readonly string? _connectionString;
         private AgentsClient? _client;
-        private readonly string? _agentId;
+        private string? _agentId;
+        private readonly string? _originalAgentId; // Store original value from environment
         private readonly IConfiguration _configuration;
         private readonly ILogger<AzureAIAgentService> _logger;
         private bool _isConfigured = false;
@@ -38,6 +39,7 @@ namespace dotnetfashionassistant.Services
               // Only log a single line with key information about configuration
             _connectionString = doubleUnderscoreConn ?? singleUnderscoreConn;
             _agentId = doubleUnderscoreId ?? singleUnderscoreId;
+            _originalAgentId = _agentId; // Store original value
             
             _isConfigured = !string.IsNullOrEmpty(_connectionString) && !string.IsNullOrEmpty(_agentId);
             
@@ -46,6 +48,11 @@ namespace dotnetfashionassistant.Services
                 _logger.LogWarning("Azure AI Agent configuration missing: ConnectionString={0}, AgentId={1}", 
                     !string.IsNullOrEmpty(_connectionString), 
                     !string.IsNullOrEmpty(_agentId));
+            }
+            else
+            {
+                _logger.LogInformation("Azure AI Agent initialized with Agent ID: {AgentId}", 
+                    _agentId?.Substring(0, Math.Min(8, _agentId.Length)) + "...");
             }
         }
           // Lazy initialization of the client only when actually needed
@@ -288,6 +295,63 @@ namespace dotnetfashionassistant.Services
                 .Replace("\n\n", "<br><br>")
                 .Replace("\n", "<br>")
                 .Replace("•", "<br>•");
+        }
+        
+        /// <summary>
+        /// Updates the Agent ID for testing purposes
+        /// </summary>
+        /// <param name="newAgentId">The new agent ID to use</param>
+        public void SetAgentId(string newAgentId)
+        {
+            if (string.IsNullOrWhiteSpace(newAgentId))
+            {
+                _logger.LogWarning("Attempted to set empty or null Agent ID");
+                return;
+            }
+            
+            _agentId = newAgentId;
+            _isConfigured = !string.IsNullOrEmpty(_connectionString) && !string.IsNullOrEmpty(_agentId);
+            
+            // Force re-initialization on next use
+            _isInitialized = false;
+            
+            _logger.LogInformation("Agent ID updated for testing purposes");
+        }
+        
+        /// <summary>
+        /// Gets the current Agent ID
+        /// </summary>
+        /// <returns>The current agent ID or null if not set</returns>
+        public string? GetCurrentAgentId()
+        {
+            return _agentId;
+        }
+        
+        /// <summary>
+        /// Gets the original Agent ID from environment variables
+        /// </summary>
+        /// <returns>The original agent ID from environment variables</returns>
+        public string? GetOriginalAgentId()
+        {
+            return _originalAgentId;
+        }
+        
+        /// <summary>
+        /// Checks if the current Agent ID differs from the original
+        /// </summary>
+        /// <returns>True if the agent ID has been modified from the original</returns>
+        public bool IsAgentIdModified()
+        {
+            return _agentId != _originalAgentId;
+        }
+        
+        /// <summary>
+        /// Checks if the service is properly configured
+        /// </summary>
+        /// <returns>True if both connection string and agent ID are set</returns>
+        public bool IsConfigured()
+        {
+            return _isConfigured;
         }
     }
 }

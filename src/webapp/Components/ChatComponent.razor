@@ -13,11 +13,85 @@
 <div class="chat-container">
     <div class="chat-header">
         <div class="d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">Fashion Assistant</h5>
-            <button class="btn btn-sm btn-outline-primary" @onclick="StartNewConversation">
-                <i class="bi bi-plus-circle"></i> New
-            </button>
+            <div>
+                <h5 class="mb-0">Fashion Assistant</h5>
+                @{
+                    var currentAgentId = AzureAIAgentService.GetCurrentAgentId();
+                    if (!string.IsNullOrEmpty(currentAgentId))
+                    {
+                        var shortId = currentAgentId.Length > 8 ? currentAgentId.Substring(0, 8) + "..." : currentAgentId;
+                        <small class="text-muted">Agent: @shortId</small>
+                    }
+                    else
+                    {
+                        <small class="text-warning">Agent: Not configured</small>
+                    }
+                }
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ToggleAgentSettings" title="Agent Settings">
+                    <i class="bi bi-gear"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-primary" @onclick="StartNewConversation">
+                    <i class="bi bi-plus-circle"></i> New
+                </button>
+            </div>
         </div>
+        
+        @if (showAgentSettings)
+        {
+            <div class="agent-settings mt-2 p-2 border rounded bg-light">
+                <div class="row align-items-center mb-2">
+                    <div class="col-auto">
+                        <small class="text-muted">Current Agent ID:</small>
+                    </div>
+                    <div class="col">
+                        <code class="small bg-white px-2 py-1 rounded border @(AzureAIAgentService.IsAgentIdModified() ? "border-warning" : "")">
+                            @(AzureAIAgentService.GetCurrentAgentId() ?? "Not set")
+                        </code>
+                        @if (AzureAIAgentService.IsAgentIdModified())
+                        {
+                            <small class="text-warning ms-2"><i class="bi bi-exclamation-triangle"></i> Modified</small>
+                        }
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(AzureAIAgentService.GetOriginalAgentId()))
+                {
+                    <div class="row align-items-center mb-2">
+                        <div class="col-auto">
+                            <small class="text-muted">Original (env):</small>
+                        </div>
+                        <div class="col">
+                            <code class="small bg-light px-2 py-1 rounded border text-muted">
+                                @AzureAIAgentService.GetOriginalAgentId()
+                            </code>
+                        </div>
+                    </div>
+                }
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <small class="text-muted">New Agent ID:</small>
+                    </div>
+                    <div class="col">
+                        <input type="text" class="form-control form-control-sm" @bind="tempAgentId" placeholder="Enter Agent ID" />
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-sm btn-success" @onclick="UpdateAgentId" disabled="@string.IsNullOrWhiteSpace(tempAgentId)">
+                            <i class="bi bi-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-secondary ms-1" @onclick="CancelAgentSettings">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(agentSettingsMessage))
+                {
+                    <div class="mt-1">
+                        <small class="@(agentSettingsSuccess ? "text-success" : "text-danger")">@agentSettingsMessage</small>
+                    </div>
+                }
+            </div>
+        }
     </div>
     
     <div class="chat-messages" id="chatMessages">
@@ -96,6 +170,22 @@
         padding: 15px;
         background-color: #f8f9fa;
         border-bottom: 1px solid #dee2e6;
+    }
+    
+    .agent-settings {
+        background-color: #f8f9fa !important;
+        border: 1px solid #dee2e6 !important;
+        font-size: 0.875rem;
+    }
+    
+    .agent-settings .form-control-sm {
+        font-size: 0.8rem;
+        height: calc(1.5em + 0.25rem + 2px);
+    }
+    
+    .agent-settings .btn-sm {
+        padding: 0.1rem 0.3rem;
+        font-size: 0.8rem;
     }
     
     .chat-messages {
@@ -224,11 +314,34 @@
     private string chatMessage = string.Empty;
     private bool isLoading = false;
     private string? currentThreadId;
+    
+    // Agent settings variables
+    private bool showAgentSettings = false;
+    private string tempAgentId = string.Empty;
+    private string agentSettingsMessage = string.Empty;
+    private bool agentSettingsSuccess = false;
+    private string? lastKnownAgentId = null;
 
     protected override void OnInitialized()
     {
         // Initialize with the current thread ID if available
         currentThreadId = AgentModeService.CurrentThreadId;
+        
+        // Initialize temp agent ID with current value
+        tempAgentId = AzureAIAgentService.GetCurrentAgentId() ?? string.Empty;
+        lastKnownAgentId = tempAgentId;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Check if Agent ID has changed (e.g., after reconnection)
+        var currentAgentId = AzureAIAgentService.GetCurrentAgentId();
+        if (currentAgentId != lastKnownAgentId)
+        {
+            lastKnownAgentId = currentAgentId;
+            tempAgentId = currentAgentId ?? string.Empty;
+            StateHasChanged();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -421,5 +534,59 @@
         {
             // Silently fail if JS interop fails
         }
+    }
+
+    private void ToggleAgentSettings()
+    {
+        showAgentSettings = !showAgentSettings;
+        if (showAgentSettings)
+        {
+            // Reset message and update temp ID with current value
+            agentSettingsMessage = string.Empty;
+            tempAgentId = AzureAIAgentService.GetCurrentAgentId() ?? string.Empty;
+        }
+    }
+
+    private async Task UpdateAgentId()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(tempAgentId))
+            {
+                agentSettingsMessage = "Agent ID cannot be empty";
+                agentSettingsSuccess = false;
+                return;
+            }
+
+            // Update the agent ID
+            AzureAIAgentService.SetAgentId(tempAgentId.Trim());
+            
+            // Clear current thread to start fresh with new agent
+            currentThreadId = null;
+            AgentModeService.CurrentThreadId = null;
+            chatHistory.Clear();
+            
+            agentSettingsMessage = "Agent ID updated successfully";
+            agentSettingsSuccess = true;
+            
+            // Hide settings after successful update
+            await Task.Delay(1500); // Show success message for 1.5 seconds
+            showAgentSettings = false;
+            agentSettingsMessage = string.Empty;
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            agentSettingsMessage = $"Error updating Agent ID: {ex.Message}";
+            agentSettingsSuccess = false;
+        }
+    }
+
+    private void CancelAgentSettings()
+    {
+        showAgentSettings = false;
+        agentSettingsMessage = string.Empty;
+        tempAgentId = AzureAIAgentService.GetCurrentAgentId() ?? string.Empty;
     }
 }
