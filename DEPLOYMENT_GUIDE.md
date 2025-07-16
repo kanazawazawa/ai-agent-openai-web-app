@@ -64,6 +64,82 @@ azd env get-values
 azd deploy
 ```
 
+## 既存App Serviceを保持したまま新規作成
+
+現在のApp Serviceを削除せずに、新しいApp Serviceを作成することも可能です。
+
+### 方法1: 新しいazd環境を作成
+
+```bash
+# 新しい環境を初期化
+azd env new <新しい環境名>
+
+# 例：本番環境を残して開発環境を作成
+azd env new dev-env
+
+# 新しい環境を選択
+azd env select dev-env
+
+# 新しい環境にデプロイ
+azd up
+```
+
+この方法では：
+- 既存のリソース：`rg-<元の環境名>`（保持）
+- 新しいリソース：`rg-<新しい環境名>`（新規作成）
+
+### 方法2: 手動でタグを変更
+
+既存のApp Serviceの`azd-service-name`タグを変更してから新規デプロイ：
+
+1. Azure Portalで既存のApp Serviceに移動
+2. 「タグ」セクションで`azd-service-name`の値を`web`から`web-old`に変更
+3. `azd deploy`を実行（新しいApp Serviceが作成されます）
+
+### 方法3: 既存App Service Planを共有（コスト最適化）
+
+既存のApp Service Planに新しいApp Serviceを追加することで、**追加料金なし**で新しいアプリを作成できます。
+
+#### 手順：
+
+1. **既存のApp Service Planの ID を取得**：
+   ```bash
+   # 現在のリソースグループ内のApp Service Planを確認
+   az appservice plan list --resource-group rg-<環境名> --query "[].{Name:name, Id:id}" --output table
+   ```
+
+2. **main.parameters.json を編集**：
+   ```json
+   {
+     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+     "contentVersion": "1.0.0.0",
+     "parameters": {
+       "appServiceName": {
+         "value": "app-web-new-<任意の文字列>"
+       }
+     }
+   }
+   ```
+
+3. **既存App Serviceのタグを変更**：
+   - Azure Portalで既存のApp Serviceの`azd-service-name`タグを`web`から`web-old`に変更
+
+4. **デプロイ実行**：
+   ```bash
+   azd deploy
+   ```
+
+**結果**：
+- ✅ **既存App Service Plan**: そのまま利用（追加料金なし）
+- ✅ **新しいApp Service**: 同じPlan内に作成
+- ✅ **既存App Service**: `web-old`タグで保持
+
+### 注意事項
+
+⚠️ **コスト**: 2つのApp Serviceが同時に稼働するため、料金が倍になります
+⚠️ **管理**: 複数の環境を適切に管理する必要があります
+⚠️ **DNS**: 同じカスタムドメインは1つのApp Serviceにのみ設定可能です
+
 ## トラブルシューティング
 
 ### タグ競合エラー
