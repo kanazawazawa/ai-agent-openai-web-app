@@ -105,18 +105,20 @@ az graph query -q "resources | where tags['azd-service-name'] == 'web'"
 
 ```
 SUCCESS: Your application was deployed to Azure in 36 seconds.
-You can view the resources created under the resource group rg-myapp-env in Azure Portal:
-https://portal.azure.com/#@/resource/subscriptions/xxx/resourceGroups/rg-myapp-env/overview
+You can view the resources created under the resource group rg-<環境名> in Azure Portal:
+https://portal.azure.com/#@/resource/subscriptions/<サブスクリプションID>/resourceGroups/rg-<環境名>/overview
 ```
 
 ## リソース情報
 
-### 本番環境例
-- **リソースグループ**: `rg-myapp-env`
+### リソース命名規則
+- **リソースグループ**: `rg-<環境名>`
 - **App Service**: `app-web-<ランダム文字列>`
-- **App Service プラン**: `plan-<ランダム文字列>` (P0v3)
-- **リージョン**: East US 2
+- **App Service プラン**: `plan-<ランダム文字列>` 
+- **リージョン**: デプロイ時に選択したリージョン
 - **エンドポイント**: `https://app-web-<ランダム文字列>.azurewebsites.net/`
+
+**注意**: 実際のリソース名は環境ごとに自動生成されます。具体的な情報は個人の `AZURE_RESOURCES.md` ファイルに記録してください。
 
 ## 重要な注意事項
 
@@ -125,6 +127,17 @@ https://portal.azure.com/#@/resource/subscriptions/xxx/resourceGroups/rg-myapp-e
 3. **バックアップ**: 重要なデータは事前にバックアップを取る
 4. **監視**: デプロイ後はアプリケーションログを確認する
 5. **機密情報管理**: リソース情報は `AZURE_RESOURCES.md` に記録し、`.gitignore` でバージョン管理から除外する
+
+## ⚠️ セキュリティ上の注意
+
+**絶対に公開リポジトリに含めてはいけない情報**:
+- 実際のリソース名（リソースグループ、App Service名など）
+- エンドポイントURL
+- サブスクリプションID、テナントID
+- 接続文字列、API キー
+- Agent ID
+
+これらの情報は個人の `AZURE_RESOURCES.md` ファイルで管理し、必ずGitの追跡対象から除外してください。
 
 ## リソース情報の管理
 
